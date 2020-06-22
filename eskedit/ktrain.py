@@ -68,8 +68,8 @@ def ktrain_region_driver(bedregions, vcfpath, fastapath, kmer_size, methylation_
                     # check index
                     if variant.REF != seq_context[len(seq_context) // 2]:
                         print(
-                            f'ERROR: Fasta REF {seq_context[len(seq_context) // 2]} and VCF REF {variant.REF} don\'t match',
-                            flush=True)
+                            f'ERROR: Fasta REF {seq_context[len(seq_context) // 2]} and VCF REF {variant.REF} don\'t match at position {variant.POS} on {variant.CHROM}',
+                            flush=True, file=sys.stderr)
 
                     # This is for counting allele information
                     # check methylation if C followed by G

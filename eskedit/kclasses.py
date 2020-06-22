@@ -49,7 +49,7 @@ class GRegion:
 
     def get_seq_from_fasta(self, fasta, kmer_size=1):
         # shift start left by half ksize to capture nucleotide level mutability (default is no shift)
-        fa_idx_start = max(self.start - kmer_size // 2 + 1, 1)
+        fa_idx_start = max(self.start - kmer_size // 2 + 1, 0)
         fa_idx_stop = self.stop + kmer_size // 2
         try:
             return fasta.get_seq(self.chrom, fa_idx_start, fa_idx_stop).seq
