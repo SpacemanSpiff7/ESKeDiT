@@ -1,0 +1,29 @@
+All input files may have a header if the first character of the header line is '#'
+
+    - will recognize other fields as long as they adhere to the bed format
+    - input BED files must be tab separated
+
+    - Fields for BED (listed in the order they must be in)
+        1. chrom - name of the chromosome or scaffold. Any valid seq_region_name can be used, and chromosome names can be given with or without the 'chr' prefix.
+        2. chromStart - Start position of the feature in standard chromosomal coordinates (i.e. first base is 0).
+        3. chromEnd - End position of the feature in standard chromosomal coordinates
+        4. name - Label to be displayed under the feature, if turned on in "Configure this page".
+        5. score - A score between 0 and 1000. See track lines, below, for ways to configure the display style of scored data.
+        6. strand - defined as + (forward) or - (reverse).
+
+Currently only for hg38
+
+Future Implementation Notes:
+    - preload Fasta sequences
+
+Train
+    - Have variants for 3 bins of methylation probability
+        - none/low (<0.2), intermediate (0.2-0.6), high (0.6<)
+        - mutation rates for each one
+        - only make 3 tables based on user input (i.e. <= some AC cutoff)
+
+Query
+    - Query class should load 3 tables
+    - TF-IDF for kmers
+    - TF = term frequency, count of kmers in a given region
+    - IDF = kmer count for all regions
