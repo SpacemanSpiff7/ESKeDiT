@@ -40,5 +40,5 @@ if __name__ == "__main__":
         ktrain(cmd_args.bed_file_path, cmd_args.vcf_file_path, cmd_args.fasta_path, 7, meth_vcf_path=None, nprocs=nprocs)
         pass
     else:  # run with metylation
-	ktrain(cmd_args.bed_file_path, cmd_args.vcf_file_path, cmd_args.fasta_path, 7, meth_vcf_path=cmd_args.meth_vcf_path, nprocs=cmd_args.nprocs)
+        ktrain(cmd_args.bed_file_path, cmd_args.vcf_file_path, cmd_args.fasta_path, 7, meth_vcf_path=cmd_args.meth_vcf_path, nprocs=cmd_args.nprocs)
         pass
