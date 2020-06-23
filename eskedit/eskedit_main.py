@@ -16,6 +16,7 @@ if __name__ == "__main__":
     main_parser.add_argument('-f', '--fasta', action='store', dest='fasta_path',
                              help='Input path the reference fasta file')
     main_parser.add_argument('-@', '--nprocs', action='store', dest='nprocs', help='Number of available CPUs')
+    main_parser.add_argument('-k', '--kmer_size', action='store', dest='kmer_size', help='K-mer size to use')
     main_parser.add_argument('-t', action='store_true', dest='run_test')
     main_parser.add_argument('-u', action='store_true', dest='unit_test')
     cmd_args = main_parser.parse_args()
@@ -36,6 +37,7 @@ if __name__ == "__main__":
 
     if cmd_args.meth_vcf_path is None:
         # run without methylation
+        ktrain(cmd_args.bed_file_path, cmd_args.vcf_file_path, cmd_args.fasta_path, 7, meth_vcf_path=None, nprocs=nprocs)
         pass
     else:  # run with metylation
 
