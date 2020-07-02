@@ -12,11 +12,13 @@ from cyvcf2 import VCF
 from pyfaidx import Fasta, FetchError
 import pandas as pd
 from eskedit import get_bed_regions
-from eskedit.ktools import is_dash, is_quality_snv, kmer_search, get_methylation_probability, make_directory
+from eskedit.ktools import is_dash, is_quality_snv, kmer_search, get_methylation_probability, make_directory, is_cpg, \
+    read_and_build_models
 import os
+from itertools import repeat
 
 
-def ktrain_region_driver(bedregions, vcfpath, fastapath, kmer_size, methylation_vcf_path):
+def ktrain_region_driver(bedregions: iter, vcfpath: str, fastapath: str, kmer_size: int, methylation_vcf_path: str):
     # may want to add this as a keyword argument later
     AC_cutoff = 1
     fasta = Fasta(fastapath, sequence_always_upper=True)
@@ -73,7 +75,8 @@ def ktrain_region_driver(bedregions, vcfpath, fastapath, kmer_size, methylation_
 
                     # This is for counting allele information
                     # check methylation if C followed by G
-                    if methylation_vcf_path is not None:
+
+                    if methylation_vcf_path is not None and is_cpg(seq_context):
                         # Despite the IDE's best efforts, 'meth_vcf' et al. are guaranteed to be defined here
                         methylation = get_methylation_probability(
                             meth_vcf(f'{variant.CHROM}:{variant.POS}-{variant.POS}'))
@@ -83,9 +86,11 @@ def ktrain_region_driver(bedregions, vcfpath, fastapath, kmer_size, methylation_
                         elif 0.2 <= methylation <= 0.6:
                             mid_count += 1
                             mid_meth[seq_context][nuc_idx[variant.ALT[0]]] += 1
-                        else:
+                        elif 0.6 < methylation <= 1:
                             hi_count += 1
                             hi_meth[seq_context][nuc_idx[variant.ALT[0]]] += 1
+                        else:
+                            print('Irregular meth prob')
 
                     rare_transitions_count[seq_context][nuc_idx[variant.ALT[0]]] += 1
 
@@ -116,7 +121,8 @@ def ktrain_region_driver(bedregions, vcfpath, fastapath, kmer_size, methylation_
         return frozenset(reference_kmer_counts.items()), freeze_transitions(rare_transitions_count)
 
 
-def ktrain(bedpath, vcfpath, fastapath, kmer_size, meth_vcf_path=None, header=False, nprocs=6):
+def ktrain(bedpath: str, vcfpath: str, fastapath: str, kmer_size: int, meth_vcf_path=None, header: bool = False,
+           nprocs: int = 6):
     start_time = time.time()
     dirname = "{}_{}".format('.'.join(bedpath.split('.')[:-1]),
                              datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
@@ -138,12 +144,17 @@ def ktrain(bedpath, vcfpath, fastapath, kmer_size, meth_vcf_path=None, header=Fa
 
     pool = mp.Pool(nprocs)
 
-    results = pool.starmap(ktrain_region_driver, driver_args)
-    pool.close()
-    pool.join()
+    # https://stackoverflow.com/questions/56075837/parallel-execution-of-a-list-of-functions
+
+    with mp.Pool(nprocs) as pool:
+        futures = [pool.starmap_async(ktrain_region_driver, driver_args)]
+        results = [fut.get() for fut in futures]
+    # results = pool.starmap(ktrain_region_driver, driver_args)
+    # pool.close()
+    # pool.join()
 
     cumulative_results = []
-    for ridx, result in enumerate(results):
+    for ridx, result in enumerate(results[0]):
         for idx, table in enumerate(result):
             if ridx == 0:
                 if idx == 0:
@@ -169,46 +180,22 @@ def ktrain(bedpath, vcfpath, fastapath, kmer_size, meth_vcf_path=None, header=Fa
                         for alt_idx, count in enumerate(count_array):
                             cumulative_results[idx][kmer][alt_idx] += count
 
-    results_index_order = ['ref_kmer_counts', 'singleton_transitions', 'all_transitions', 'low_methylation',
+    results_index_order = ['ref_kmer_counts', 'rare_transitions', 'low_methylation',
                            'intermediate_methylation', 'high_methylation']
-    # TODO make results directory
     dirpath = make_directory(dirname=dirname)
     for i, res in enumerate(cumulative_results):
         df = pd.DataFrame.from_dict(res, orient='index').sort_index()
         if i > 0:
             df.columns = list('ACGT')
         df.to_csv(os.path.join(dirpath, '.'.join([results_index_order[i], 'csv'])))
+
+    models = read_and_build_models(dirpath)
+    model_dir_name = "{}_MultinomialModel_{}".format('.'.join(bedpath.split('.')[:-1]),
+                                                     datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
+    model_dir_path = make_directory(dirname=model_dir_name)
+    for name, model_df in models.items():
+        model_df.to_csv(os.path.join(model_dir_path, '.'.join([f'{name}_probability', 'csv'])))
     print(f'Done in {time.time() - start_time}')
-
-    # if meth_vcf_path is None:
-    #     results = [total_kcounts, total_transitions_rare]
-    # else:
-    #     results = [total_kcounts, total_transitions_rare, tot_lo, tot_med, tot_hi]
-
-    # transitions = defaultdict(lambda: defaultdict(lambda: array.array('L', [0, 0, 0, 0])))
-    #
-    # def update_master_transitions(trans_type: str, transitions_dict: defaultdict):
-
-    #
-    # reference_kmer_counts = Counter()
-    # for result_dict in results:
-    #     for key, value in result_dict.items():
-    #         if key == 'ref_kcounts':
-    #             reference_kmer_counts += value
-    #         else:
-    #             update_master_transitions(key, value)
-
-    # ktrain_region_driver(region_chunks[0], vcfpath, fastapath, kmer_size, meth_vcf_path)
-    # procs = []
-    # for chunk_of_regions in region_chunks:
-    #     procs.append(mp.Process(target=ktrain_region_driver, args=(chunk_of_regions, vcfpath, fastapath, kmer_size, meth_vcf_path)))
-    # for proc in procs:
-    #     proc.start()
-    #
-    # results = queue.get()
-    #
-    # for proc in procs:
-    #     proc.join()
 
     # Fasta indexing is inclusive start and stop (idx starts at 1)
     # VCF indexing works same as Fasta

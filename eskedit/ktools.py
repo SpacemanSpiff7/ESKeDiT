@@ -8,14 +8,67 @@ import numpy as np
 from eskedit import GRegion
 import os
 import datetime
+import pandas as pd
+from os import listdir
+from os.path import isfile, join, splitext
+from scipy.stats import multinomial
+import math
 
-def get_methylation_probability(vcf_iter, name=None):
+
+def rowmnd(row):
+    ns = [r for r in row.iloc[:4] if r > 0]
+    ns.append(row.iloc[4] - sum(ns))
+    alphas = [n / row.iloc[4] for n in ns]
+    return multinomial.pmf(ns, n=row.iloc[4], p=alphas)
+
+
+def generate_multinomial_probabilities(transitions_path, counts_path, ksize=None):
+    ts = pd.read_csv(transitions_path, index_col=0).sort_index()
+    cts = pd.read_csv(counts_path, index_col=0).sort_index()
+    cts.columns = ['counts']
+    ts = ts.merge(cts, left_on=None, right_on=None, left_index=True, right_index=True)
+    if ksize is None:
+        ksize = int(math.log(len(cts), 4))
+    ts['probability'] = ts.apply(rowmnd, axis=1)
+    return ts[['probability']].fillna(0)
+
+
+def read_and_build_models(directory_path: str) -> dict:
+    # https://stackoverflow.com/questions/3207219/how-do-i-list-all-files-of-a-directory
+    expected_keys = ['ref_kmer_counts', 'singleton_transitions', 'hi_methylation', 'intermediate_methylation',
+                     'low_methylation']
+    files = {}
+    for f in listdir(directory_path):
+        if isfile(join(directory_path, f)):
+            files.update({splitext(f)[0]: join(directory_path, f)})
+    counts = {}
+    ref_counts_path = files[expected_keys[0]]
+    for name, path in files.items():
+        if name != expected_keys[0]:
+            counts.update({name: generate_multinomial_probabilities(path, ref_counts_path)})
+    return counts
+
+
+def is_cpg(seq: str) -> bool:
+    k = len(seq)
+    if k < 3:
+        if k == 2:
+            return k[0] == 'C' and k[1] == 'G'
+        else:
+            return False
+    elif seq[k // 2] == 'C' and seq[k // 2 + 1] == 'G':
+        return True
+    else:
+        return False
+
+
+def get_methylation_probability(vcf_iter, name=None) -> float:
     if name is None:
         name = 'methyl_mean'
     meth_prob = None
     for variant in vcf_iter:
         # float(v.format('methylation')[0])
-        meth_prob = float(variant.format('methylation')[0])
+        meth_prob = float(variant.format('methylation')[0]) / 100
     if meth_prob is None:
         # perhaps change this return value to 'None' to distinguish from bases with data
         return 0.0
@@ -23,11 +76,11 @@ def get_methylation_probability(vcf_iter, name=None):
         return meth_prob
 
 
-def is_quality_snv(variant):
+def is_quality_snv(variant) -> bool:
     return variant.FILTER is None and len(variant.ALT) == 1 and len(variant.REF) == 1 and len(variant.ALT[0]) == 1
 
 
-def count_kmers(sequence, kmer_length):
+def count_kmers(sequence: str, kmer_length: int) -> Counter:
     counts = Counter()
     for i in range(len(sequence) - (kmer_length - 1)):
         next_seq = sequence[i:(i + kmer_length)]
@@ -36,13 +89,13 @@ def count_kmers(sequence, kmer_length):
     return counts
 
 
-def count_start_codons(sequence, kmer_length):
+def count_start_codons(sequence: str, kmer_length: int):
     start_codon = 'ATG'
     matches = re.findall(start_codon, sequence)
     return len(matches)
 
 
-def count_stop_codons(sequence, kmer_length):
+def count_stop_codons(sequence: str, kmer_length: int):
     regex = r'TAA|TAG|TGA'
     matches = re.findall(regex, sequence)
     return len(matches)
@@ -53,7 +106,7 @@ def count_g4s():
     pass
 
 
-def count_orfs(sequence, kmer_length):
+def count_orfs(sequence: str, kmer_length: int):
     # regex = r'(?<=ATG)(.*)(?=TAA|TAG|TGA)'
     start_codon = 'ATG'
     stop_codons = ['TAA', 'TAG', 'TGA']
@@ -80,7 +133,7 @@ def count_orfs(sequence, kmer_length):
     return len(orfs)
 
 
-def kmer_search(sequence, kmer_length, additional_functions=None):
+def kmer_search(sequence: str, kmer_length: int, additional_functions: iter = None):
     """
     Driver for get_kmer_count
     :param additional_functions: an iterable consisting of functions that accept sequence and kmer_length (in that order) as positional arguments

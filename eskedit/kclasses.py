@@ -1,13 +1,11 @@
 import sys
-
-from cyvcf2 import VCF
 from pyfaidx import FetchError, Fasta
 
 
 class GRegion:
 
     def __init__(self, *args, **kwargs):
-        self.default_names = ['chrom', 'start', 'stop', 'name', 'score','strand']
+        self.default_names = ['chrom', 'start', 'stop', 'name', 'score', 'strand']
         self.fields = {'chrom': None, 'start': None, 'stop': None, 'name': None, 'score': None, 'strand': None}
         # self.fields = 6 * [None]
         for idx, key in enumerate(self.fields.keys()):
@@ -85,8 +83,3 @@ class GRegion:
                     ''.join(filter(str.isdigit, other.fields['chrom'])))
             except ValueError:
                 return self.fields['chrom'] < other.fields['chrom']
-
-
-class KVCF:
-    def __init__(self, path):
-        self.vcf = VCF(path)

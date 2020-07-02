@@ -12,7 +12,7 @@ def test_ktrain():
     vcf_path = "/Users/simonelongo/too_big_for_icloud/gnomAD_v3/gnomad.genomes.r3.0.sites.vcf.bgz"
     fasta_path = "/Users/simonelongo/too_big_for_icloud/ref_genome/hg38/hg38.fa"
     # bed_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/test_ENSEMBL.bed'
-    bed_path = "/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/small_var.bed"
+    bed_path = "/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/variant_rich.bed"
     meth_vcf_path = "/Users/simonelongo/too_big_for_icloud/gnomAD_v3/gnomadv3_methylation_2.vcf.bgz"
     results = ktrain(bed_path, vcf_path, fasta_path, 7, meth_vcf_path)
     print(results)
