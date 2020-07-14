@@ -14,6 +14,8 @@ from os.path import isfile, join, splitext
 from scipy.stats import multinomial
 import math
 
+from eskedit.kclasses import Model
+
 
 def rowmnd(row):
     ns = [r for r in row.iloc[:4] if r > 0]
@@ -33,7 +35,7 @@ def generate_multinomial_probabilities(transitions_path, counts_path, ksize=None
     return ts[['probability']].fillna(0)
 
 
-def read_and_build_models(directory_path: str) -> dict:
+def read_and_build_models(directory_path: str) -> list:
     # https://stackoverflow.com/questions/3207219/how-do-i-list-all-files-of-a-directory
     expected_keys = ['ref_kmer_counts', 'singleton_transitions', 'hi_methylation', 'intermediate_methylation',
                      'low_methylation']
@@ -46,23 +48,58 @@ def read_and_build_models(directory_path: str) -> dict:
     for name, path in files.items():
         if name != expected_keys[0]:
             counts.update({name: generate_multinomial_probabilities(path, ref_counts_path)})
-    return counts
+    return df_to_kmodel(counts)
 
 
-def is_cpg(seq: str) -> bool:
+def read_models(directory_path: str) -> list:
+    files = {}
+    for f in listdir(directory_path):
+        if isfile(join(directory_path, f)):
+            files.update({splitext(f)[0]: join(directory_path, f)})
+    counts = {}
+    for name, path in files.items():
+        counts.update({name: pd.read_csv(path, index_col=0)})
+    return df_to_kmodel(counts)
+
+
+def df_to_kmodel(counts: dict) -> list:
+    models = []
+    for k, v in counts.items():
+        models.append(Model(k, v))
+    return models
+
+
+def is_cpg_ct(seq: str, alt: str) -> bool:
     k = len(seq)
     if k < 3:
         if k == 2:
-            return k[0] == 'C' and k[1] == 'G'
+            return seq[0] == 'C' and seq[1] == 'G' and alt == 'T'
         else:
             return False
-    elif seq[k // 2] == 'C' and seq[k // 2 + 1] == 'G':
+    elif seq[k // 2] == 'C' and seq[k // 2 + 1] == 'G' and alt == 'T':
         return True
     else:
         return False
 
 
-def get_methylation_probability(vcf_iter, name=None) -> float:
+def avg_seq_methylation_probability(vcf_iter, seq_len: int = None) -> float:
+    meth_probs = []
+    for variant in vcf_iter:
+        # float(v.format('methylation')[0])
+        meth_probs.append(float(variant.format('methylation')[0]) / 100)
+
+    if seq_len is not None:
+        len_meth_prob = seq_len
+    else:
+        len_meth_prob = len(meth_probs)
+    if len(meth_probs) == 0:
+        # perhaps change this return value to 'None' to distinguish from bases with data
+        return 0.0
+    else:
+        return sum(meth_probs) / len_meth_prob
+
+
+def base_methylation_probability(vcf_iter, name=None) -> float:
     if name is None:
         name = 'methyl_mean'
     meth_prob = None
@@ -106,8 +143,34 @@ def count_g4s():
     pass
 
 
+def kozak_strength(sequence: str) -> int:
+    # 3: Strong = (A/G)NNAUGG
+    # 2: Moderate = (A/G)NNAUGN or NNNAUGG
+    # 1: Weak = NNNAUGN
+    # 0: Nothing = NNNNNNN
+    if len(sequence) != 7:
+        return 0
+    else:
+        score = 0
+        putative_start_codon = sequence[3:6]
+        if putative_start_codon == 'ATG':
+            score += 1
+        else:
+            return 0
+        if sequence[0] == 'A' or sequence[0] == 'G':
+            score += 1
+        if sequence[6] == 'G':
+            score += 1
+        return score
+
+
+def count_strong_start_codons(seqence: str, kmer_length: int):
+    pass
+
+
 def count_orfs(sequence: str, kmer_length: int):
     # regex = r'(?<=ATG)(.*)(?=TAA|TAG|TGA)'
+    # TODO: noncanonical start codons
     start_codon = 'ATG'
     stop_codons = ['TAA', 'TAG', 'TGA']
     in_orf = False
@@ -133,15 +196,13 @@ def count_orfs(sequence: str, kmer_length: int):
     return len(orfs)
 
 
-def kmer_search(sequence: str, kmer_length: int, additional_functions: iter = None):
+def kmer_search(sequence: str, kmer_length: int, additional_functions: iter = None) -> dict:
     """
     Driver for get_kmer_count
     :param additional_functions: an iterable consisting of functions that accept sequence and kmer_length (in that order) as positional arguments
     :param sequence:
     :param kmer_length:
-    :param count_gc: Return GC content (default = False)
-    :param count_n: Reurn count number of unreferenced nucleotides (default = False)
-    :return: a list containing the results of the analysis (will always count_kmers by default)
+    :return: a dictionary containing the results of the analysis (will always count_kmers by default). Maps function name to result
     """
     if additional_functions is None:
         additional_functions = []
@@ -176,7 +237,7 @@ def kmer_search(sequence: str, kmer_length: int, additional_functions: iter = No
     #     return counts
 
 
-def get_bed_regions(bedpath, hasheader=False, nchunks=None, verbose=False):
+def get_bed_regions(bedpath, hasheader: bool = False, nchunks: int = None, return_extra=False):
     headernames = None
     numfields = 0
     regions = []
@@ -210,13 +271,10 @@ def get_bed_regions(bedpath, hasheader=False, nchunks=None, verbose=False):
     if nchunks is None:
         return regions
     else:
-        if not isinstance(nchunks, int):
-            return regions
-        else:
-            nchunks = int(nchunks)
-            regions = np.array_split(regions, nchunks)
+        nchunks = int(nchunks)
+        regions = np.array_split(regions, nchunks)
 
-    if verbose:
+    if return_extra:
         return regions, chroms, headernames
     else:
         return regions

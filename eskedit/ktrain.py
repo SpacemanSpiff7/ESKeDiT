@@ -12,7 +12,7 @@ from cyvcf2 import VCF
 from pyfaidx import Fasta, FetchError
 import pandas as pd
 from eskedit import get_bed_regions
-from eskedit.ktools import is_dash, is_quality_snv, kmer_search, get_methylation_probability, make_directory, is_cpg, \
+from eskedit.ktools import is_dash, is_quality_snv, kmer_search, base_methylation_probability, make_directory, is_cpg_ct, \
     read_and_build_models
 import os
 from itertools import repeat
@@ -76,9 +76,9 @@ def ktrain_region_driver(bedregions: iter, vcfpath: str, fastapath: str, kmer_si
                     # This is for counting allele information
                     # check methylation if C followed by G
 
-                    if methylation_vcf_path is not None and is_cpg(seq_context):
+                    if methylation_vcf_path is not None and is_cpg_ct(seq_context, variant.ALT[0]):
                         # Despite the IDE's best efforts, 'meth_vcf' et al. are guaranteed to be defined here
-                        methylation = get_methylation_probability(
+                        methylation = base_methylation_probability(
                             meth_vcf(f'{variant.CHROM}:{variant.POS}-{variant.POS}'))
                         if methylation < 0.2:  # low/none
                             lo_count += 1
@@ -193,8 +193,8 @@ def ktrain(bedpath: str, vcfpath: str, fastapath: str, kmer_size: int, meth_vcf_
     model_dir_name = "{}_MultinomialModel_{}".format('.'.join(bedpath.split('.')[:-1]),
                                                      datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
     model_dir_path = make_directory(dirname=model_dir_name)
-    for name, model_df in models.items():
-        model_df.to_csv(os.path.join(model_dir_path, '.'.join([f'{name}_probability', 'csv'])))
+    for model in models:
+        model.probability_table.to_csv(os.path.join(model_dir_path, '.'.join([f'{model.name}_probability', 'csv'])))
     print(f'Done in {time.time() - start_time}')
 
     # Fasta indexing is inclusive start and stop (idx starts at 1)

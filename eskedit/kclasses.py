@@ -1,5 +1,87 @@
 import sys
+
 from pyfaidx import FetchError, Fasta
+import pandas as pd
+
+
+class Model:
+    def __init__(self, name: str, table: pd.DataFrame):
+        self.name = name
+        self.probability_dict = table.iloc[:, 0].to_dict()
+        self.probability_table = table
+        self.kmer_size = len(table.index[0])
+        pass
+
+    def __str__(self):
+        return str({self.name: self.probability_table})
+
+    def __repr__(self):
+        return str(self)
+
+    def get_prob(self, seq: str) -> float:
+        # TODO: add to constructor or somewhere lese
+        gnomad_chroms, test_chroms = 71702, 71702
+        kmer_count = 0
+        freq_sum = 0.0
+        for start in range(len(seq) - self.kmer_size + 1):
+            next_k = seq[start:start + self.kmer_size]
+            if 'N' not in next_k:
+                kmer_count += 1
+                try:
+                    freq_sum += self.probability_dict[next_k]
+                except KeyError:
+                    freq_sum += 0
+        return freq_sum / gnomad_chroms * test_chroms
+
+
+class ModelOps:
+    def __init__(self):
+        self.kmer_size = 0
+        self.models = {}
+
+    def add_models(self, models: iter):
+        for m in models:
+            if self.kmer_size == 0:
+                self.kmer_size = m.kmer_size
+            else:
+                if self.kmer_size != m.kmer_size:
+                    print(f'WARNING: K-mer size mismatch. Expected {self.kmer_size} and found {m.kmer_size}.',
+                          flush=True, file=sys.stderr)
+            self.add_model(m)
+        return self.model_names()
+
+    def add_model(self, model: Model):
+        self.models.update({model.name: model})
+
+    def model_names(self) -> list:
+        return list(self.models.keys())
+
+    def modeldiv(self, name_numerator: str, name_denominator: str, seq: str) -> float:
+        denom = self.models[name_denominator].get_prob(seq)
+        if denom == 0:
+            denom = 0.0000000000000001
+        return self.models[name_numerator].get_prob(seq) / denom
+
+    def get_model_prob(self, name: str, seq: str) -> float:
+        return self.models[name].get_prob(seq)
+
+    def get_model_probabilities(self, names: iter = None, seq: str = None) -> dict:
+        results = {}
+        if names is None:
+            names = self.model_names()
+        if seq is not None:
+            for n in names:
+                results.update({n: self.models[n].get_prob(seq)})
+        return results
+
+
+# class MethylationModel(ModelOps):
+#     def __init__(self, methylation_vcf: str, low=None, mid=None, hi=None, nodata=None):
+#         super().__init__()
+
+#         for name, model in {'low': low, 'mid': mid, 'hi': hi, 'nodata': nodata}.items():
+#             if model is not None:
+#                 self.add_model(model)
 
 
 class GRegion:
@@ -27,6 +109,12 @@ class GRegion:
     def gnomad_rep(self):
         return '{}:{}-{}'.format(self.chrom, self.start, self.stop)
 
+    def strand(self):
+        try:
+            return self.fields['strand']
+        except KeyError:
+            return None
+
     def num_fields(self):
         num_fields = 0
         for v in self.fields.values():
@@ -34,9 +122,9 @@ class GRegion:
                 num_fields += 1
         return num_fields
 
-    def add_field(self, key_string, value):
-        if not isinstance(key_string, str):
-            raise KeyError('GRegion_object.add_field(key, value) must have a type \'str\' key')
+    def add_field(self, key_string: str, value):
+        # if not isinstance(key_string, str):
+        #     raise KeyError('GRegion_object.add_field(key, value) must have a type \'str\' key')
         try:
             tval = self.fields.get(key_string)
             self.fields.update({key_string: value})
@@ -45,7 +133,7 @@ class GRegion:
             self.fields.update({key_string: value})
             return None
 
-    def get_seq_from_fasta(self, fasta, kmer_size=1):
+    def get_seq_from_fasta(self, fasta: Fasta, kmer_size=1):
         # shift start left by half ksize to capture nucleotide level mutability (default is no shift)
         fa_idx_start = max(self.start - kmer_size // 2 + 1, 0)
         fa_idx_stop = self.stop + kmer_size // 2

@@ -27,3 +27,44 @@ Query
     - TF-IDF for kmers
     - TF = term frequency, count of kmers in a given region
     - IDF = kmer count for all regions
+
+    AAAAAAAACGCGCGCGCAAAAAAAAGCGCGTTTCGTTTTTT
+            *********                --
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

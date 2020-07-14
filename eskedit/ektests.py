@@ -11,8 +11,8 @@ def test_ktrain():
     gnomad_vcf = VCF("/Users/simonelongo/too_big_for_icloud/gnomAD_v3/gnomad.genomes.r3.0.sites.vcf.bgz")
     vcf_path = "/Users/simonelongo/too_big_for_icloud/gnomAD_v3/gnomad.genomes.r3.0.sites.vcf.bgz"
     fasta_path = "/Users/simonelongo/too_big_for_icloud/ref_genome/hg38/hg38.fa"
-    # bed_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/test_ENSEMBL.bed'
-    bed_path = "/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/variant_rich.bed"
+    bed_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/test_ENSEMBL.bed'
+    #bed_path = "/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/variant_rich.bed"
     meth_vcf_path = "/Users/simonelongo/too_big_for_icloud/gnomAD_v3/gnomadv3_methylation_2.vcf.bgz"
     results = ktrain(bed_path, vcf_path, fasta_path, 7, meth_vcf_path)
     print(results)
@@ -86,6 +86,15 @@ def test_ktools():
     # for k, v in results1.items():
     #     print(k, str(v))
     print(f'kmer_search wall time: {time.time() - ktime}')
+
+    from eskedit.ktools import read_and_build_models, read_models
+    models1 = read_and_build_models('/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/models/raw_counts/pc_exon_complement_22june2020_2020-06-23_15-14')
+    #models2 = read_models('/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/variant_rich_MultinomialModel_2020-07-02_12-51')
+    # print(models1, '\n', models2)
+    probs1 = []
+    for model in models1:
+        probs1.append(model.get_prob(sequence))
+    print(probs1)
     return 'ktools test done in {}'.format(time.time() - start)
 
 
