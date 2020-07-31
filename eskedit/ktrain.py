@@ -12,7 +12,8 @@ from cyvcf2 import VCF
 from pyfaidx import Fasta, FetchError
 import pandas as pd
 from eskedit import get_bed_regions
-from eskedit.ktools import is_dash, is_quality_snv, kmer_search, base_methylation_probability, make_directory, is_cpg_ct, \
+from eskedit.ktools import is_dash, is_quality_snv, kmer_search, base_methylation_probability, make_directory, \
+    is_cpg_ct, \
     read_and_build_models
 import os
 from itertools import repeat
@@ -21,6 +22,7 @@ from itertools import repeat
 def ktrain_region_driver(bedregions: iter, vcfpath: str, fastapath: str, kmer_size: int, methylation_vcf_path: str):
     # may want to add this as a keyword argument later
     AC_cutoff = 1
+    base_methylation_probability_cache = base_methylation_probability
     fasta = Fasta(fastapath, sequence_always_upper=True)
     gnomadVCF = VCF(vcfpath)
     reference_kmer_counts = Counter()
@@ -32,6 +34,7 @@ def ktrain_region_driver(bedregions: iter, vcfpath: str, fastapath: str, kmer_si
     if methylation_vcf_path is not None:
         meth_vcf = VCF(methylation_vcf_path)
         lo_count, mid_count, hi_count = 0, 0, 0
+        no_count = 0
         low_meth = defaultdict(lambda: array.array('L', [0, 0, 0, 0]))  # < 0.2
         mid_meth = defaultdict(lambda: array.array('L', [0, 0, 0, 0]))  # 0.2-0.6
         hi_meth = defaultdict(lambda: array.array('L', [0, 0, 0, 0]))  # # > 0.6
@@ -39,7 +42,7 @@ def ktrain_region_driver(bedregions: iter, vcfpath: str, fastapath: str, kmer_si
     nuc_idx = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
     for region in bedregions:
         # bed indices will be same as start/stop stored by GRegion
-        # Since gnomad variants are aligned to forawrd strand, do not consider strandedness
+        # Since gnomad variants are aligned to forawrd str and, do not consider strandedness
         try:
             seq = region.get_seq_from_fasta(fasta, kmer_size=kmer_size)
         except KeyError:
@@ -78,9 +81,12 @@ def ktrain_region_driver(bedregions: iter, vcfpath: str, fastapath: str, kmer_si
 
                     if methylation_vcf_path is not None and is_cpg_ct(seq_context, variant.ALT[0]):
                         # Despite the IDE's best efforts, 'meth_vcf' et al. are guaranteed to be defined here
-                        methylation = base_methylation_probability(
+                        methylation = base_methylation_probability_cache(
                             meth_vcf(f'{variant.CHROM}:{variant.POS}-{variant.POS}'))
-                        if methylation < 0.2:  # low/none
+                        if methylation < 0:
+                            print(f'No methylation data for {variant.CHROM}:{variant.POS}-{variant.POS} with context {seq_context}', file=sys.stderr)
+                            no_count += 1
+                        elif methylation < 0.2:  # low/none
                             lo_count += 1
                             low_meth[seq_context][nuc_idx[variant.ALT[0]]] += 1
                         elif 0.2 <= methylation <= 0.6:
@@ -97,7 +103,7 @@ def ktrain_region_driver(bedregions: iter, vcfpath: str, fastapath: str, kmer_si
         # print summary of kmer search on GRegion fields to stdout
         region.add_field('num_variants', f'AC_lte_{AC_cutoff}={num_singletons},all_snvs={num_all_variants}')
         if methylation_vcf_path is not None:
-            region.add_field('methylation', f'low={lo_count},intermediate={mid_count},high={hi_count}')
+            region.add_field('methylation', f'low={lo_count},intermediate={mid_count},high={hi_count},no_data={no_count}')
         print(str(region), flush=True)
 
     # Package return values
@@ -194,7 +200,7 @@ def ktrain(bedpath: str, vcfpath: str, fastapath: str, kmer_size: int, meth_vcf_
                                                      datetime.datetime.now().strftime('%Y-%m-%d_%H-%M'))
     model_dir_path = make_directory(dirname=model_dir_name)
     for model in models:
-        model.probability_table.to_csv(os.path.join(model_dir_path, '.'.join([f'{model.name}_probability', 'csv'])))
+        model.probability_table.to_csv(os.path.join(model_dir_path, '.'.join([f'{model.model_name}_probability', 'csv'])))
     print(f'Done in {time.time() - start_time}')
 
     # Fasta indexing is inclusive start and stop (idx starts at 1)
@@ -218,3 +224,12 @@ def ktrain(bedpath: str, vcfpath: str, fastapath: str, kmer_size: int, meth_vcf_
     #     # Local kmer count
     #
     #     # global kmer count
+
+
+def ktrain_main(cmd_args):
+    # def ktrain(bedpath: str, vcfpath: str, fastapath: str, kmer_size: int, meth_vcf_path=None, header: bool = False,
+    #            nprocs: int = 6):
+    ktrain(cmd_args.bed_file_path, cmd_args.vcf_file_path, cmd_args.fasta_path, cmd_args._kmer_size,
+           meth_vcf_path=cmd_args.meth_vcf_path, nprocs=cmd_args.nprocs)
+
+    pass

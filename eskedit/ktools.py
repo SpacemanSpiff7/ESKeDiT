@@ -14,7 +14,7 @@ from os.path import isfile, join, splitext
 from scipy.stats import multinomial
 import math
 
-from eskedit.kclasses import Model
+from eskedit.kclasses import Model, ModelFreq
 
 
 def rowmnd(row):
@@ -22,6 +22,16 @@ def rowmnd(row):
     ns.append(row.iloc[4] - sum(ns))
     alphas = [n / row.iloc[4] for n in ns]
     return multinomial.pmf(ns, n=row.iloc[4], p=alphas)
+
+
+def generate_frequencies(transitions_path, counts_path):
+    ts = pd.read_csv(transitions_path, index_col=0).sort_index()
+    cts = pd.read_csv(counts_path, index_col=0).sort_index()
+    cts.columns = ['counts']
+    # merge to align indices
+    ts = ts.merge(cts, left_on=None, right_on=None, left_index=True, right_index=True)
+    ts = ts.iloc[:, :4].div(ts.iloc[:, 4], axis=0)
+    return ts
 
 
 def generate_multinomial_probabilities(transitions_path, counts_path, ksize=None):
@@ -51,6 +61,22 @@ def read_and_build_models(directory_path: str) -> list:
     return df_to_kmodel(counts)
 
 
+def read_and_build_frequencies(directory_path: str) -> list:
+    # https://stackoverflow.com/questions/3207219/how-do-i-list-all-files-of-a-directory
+    expected_keys = ['ref_kmer_counts', 'singleton_transitions', 'hi_methylation', 'intermediate_methylation',
+                     'low_methylation']
+    files = {}
+    for f in listdir(directory_path):
+        if isfile(join(directory_path, f)):
+            files.update({splitext(f)[0]: join(directory_path, f)})
+    counts = {}
+    ref_counts_path = files[expected_keys[0]]
+    for name, path in files.items():
+        if name != expected_keys[0]:
+            counts.update({name: generate_frequencies(path, ref_counts_path)})
+    return df_to_freq_model(counts)
+
+
 def read_models(directory_path: str) -> list:
     files = {}
     for f in listdir(directory_path):
@@ -69,6 +95,13 @@ def df_to_kmodel(counts: dict) -> list:
     return models
 
 
+def df_to_freq_model(counts: dict) -> list:
+    models = []
+    for k, v in counts.items():
+        models.append(ModelFreq(k, v))
+    return models
+
+
 def is_cpg_ct(seq: str, alt: str) -> bool:
     k = len(seq)
     if k < 3:
@@ -80,6 +113,17 @@ def is_cpg_ct(seq: str, alt: str) -> bool:
         return True
     else:
         return False
+
+
+def is_cpg(seq: str) -> bool:
+    k = len(seq)
+    if k < 3:
+        if k == 2:
+            return seq[0] == 'C' and seq[1] == 'G'
+        else:
+            return False
+    else:
+        return seq[k // 2] == 'C' and seq[k // 2 + 1] == 'G'
 
 
 def avg_seq_methylation_probability(vcf_iter, seq_len: int = None) -> float:
@@ -108,7 +152,7 @@ def base_methylation_probability(vcf_iter, name=None) -> float:
         meth_prob = float(variant.format('methylation')[0]) / 100
     if meth_prob is None:
         # perhaps change this return value to 'None' to distinguish from bases with data
-        return 0.0
+        return -1.0
     else:
         return meth_prob
 
@@ -126,24 +170,25 @@ def count_kmers(sequence: str, kmer_length: int) -> Counter:
     return counts
 
 
-def count_start_codons(sequence: str, kmer_length: int):
-    start_codon = 'ATG'
-    matches = re.findall(start_codon, sequence)
+def count_start_codons(sequence: str, kmer_length: int) -> int:
+    start_codon = re.compile(r'ATG')
+    matches = start_codon.findall(sequence)
     return len(matches)
 
 
-def count_stop_codons(sequence: str, kmer_length: int):
-    regex = r'TAA|TAG|TGA'
-    matches = re.findall(regex, sequence)
+def count_stop_codons(sequence: str, kmer_length: int) -> int:
+    regex = re.compile(r'TAA|TAG|TGA')
+    matches = regex.findall(sequence)
     return len(matches)
 
 
-def count_g4s():
-    # TODO
-    pass
+def count_g4s(sequence: str, kmer_length: int) -> int:
+    g4_regex = re.compile(r'([gG]{3,5}\w{1,7}){3}[gG]{3,5}')
+    matches = g4_regex.findall(sequence)
+    return len(matches)
 
 
-def kozak_strength(sequence: str) -> int:
+def _kozak_strength(sequence: str) -> int:
     # 3: Strong = (A/G)NNAUGG
     # 2: Moderate = (A/G)NNAUGN or NNNAUGG
     # 1: Weak = NNNAUGN
@@ -164,23 +209,38 @@ def kozak_strength(sequence: str) -> int:
         return score
 
 
-def count_strong_start_codons(seqence: str, kmer_length: int):
-    pass
+def count_strong_start_codons(sequence: str, kmer_length: int) -> int:
+    # start_codon = re.compile(r'ATG')
+    count = 0
+    kozak_str = _kozak_strength
+
+    for cdn_start in range(len(sequence)):
+        next_codon = sequence[cdn_start:cdn_start + 3]
+        if next_codon == 'ATG':
+            if cdn_start - 3 < 0 or cdn_start + 4 > len(sequence) - 1:
+                continue
+            else:
+                context = sequence[cdn_start - 3:cdn_start + 4]
+                if kozak_str(context) == 3:
+                    count += 1
+    return count
 
 
-def count_orfs(sequence: str, kmer_length: int):
+def count_orfs(sequence: str, kmer_length: int) -> int:
     # regex = r'(?<=ATG)(.*)(?=TAA|TAG|TGA)'
-    # TODO: noncanonical start codons
+    # TODO: noncanonical start codons and all reading frames
     start_codon = 'ATG'
     stop_codons = ['TAA', 'TAG', 'TGA']
     in_orf = False
     orf_start = None
+    # kozak = 0
     orfs = []
     for idx, base in enumerate(sequence):
         if not in_orf:
             putative_codon = sequence[idx:idx + 3]
             if putative_codon == start_codon:
                 in_orf = True
+                # kozak = _kozak_strength(sequence[idx - 3:idx + 4])
                 orf_start = idx
                 idx += 2
         else:
@@ -188,12 +248,60 @@ def count_orfs(sequence: str, kmer_length: int):
             if next_codon in stop_codons:
                 orfs.append((orf_start, idx + 3))
                 in_orf = False
+                # kozak = 0
                 orf_start = idx + 3
             idx += 2
     # if in_orf:
     #     orfs.append((orf_start, None))
 
     return len(orfs)
+
+
+def count_strong_orfs(sequence: str, kmer_length: int) -> int:
+    # regex = r'(?<=ATG)(.*)(?=TAA|TAG|TGA)'
+    # TODO: noncanonical start codons
+    start_codon = 'ATG'
+    stop_codons = ['TAA', 'TAG', 'TGA']
+    kozak = 0
+    orfs = []
+    check_kozak = _kozak_strength
+    # split seq into 3 reading frames
+    reading_frames = [sequence[i:] for i in range(3)]
+    for seq in reading_frames:
+        in_orf = False
+        orf_start = None
+
+        for codon_idx in range(0, len(seq), 3):
+            next_codon = seq[codon_idx:codon_idx + 3]
+            if not in_orf:
+                if next_codon == start_codon:
+                    kozak = check_kozak(seq[codon_idx - 3:codon_idx + 4])
+                    if kozak == 3:
+                        in_orf = True
+                        orf_start = codon_idx
+            else:
+                if next_codon in stop_codons:
+                    orfs.append((orf_start, codon_idx + 3))
+                    in_orf = False
+    return len(orfs)
+    # for idx, base in enumerate(sequence):
+    #     if not in_orf:
+    #         putative_codon = sequence[idx:idx + 3]
+    #         if putative_codon == start_codon:
+    #             in_orf = True
+    #             kozak = _kozak_strength(sequence[idx - 3:idx + 4])
+    #             orf_start = idx
+    #             idx += 2
+    #     else:
+    #         next_codon = sequence[idx:idx + 3]
+    #         if next_codon in stop_codons:
+    #             orfs.append((orf_start, idx + 3))
+    #             in_orf = False
+    #             # kozak = 0
+    #             orf_start = idx + 3
+    #         idx += 2
+    # # if in_orf:
+    #     orfs.append((orf_start, None))
 
 
 def kmer_search(sequence: str, kmer_length: int, additional_functions: iter = None) -> dict:

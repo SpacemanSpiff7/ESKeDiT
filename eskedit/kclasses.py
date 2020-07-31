@@ -1,5 +1,5 @@
 import sys
-
+import numpy as np
 from pyfaidx import FetchError, Fasta
 import pandas as pd
 
@@ -34,6 +34,78 @@ class Model:
         return freq_sum / gnomad_chroms * test_chroms
 
 
+class ModelFreq:
+    def __init__(self, name: str, table: pd.DataFrame):
+        self.model_name = name
+        self.probability_dict = table.T.to_dict()
+        self.probability_table = table
+        self.kmer_size = len(table.index[0])
+        pass
+
+    def __str__(self):
+        return str({self.model_name: self.probability_table.head()})
+
+    def __repr__(self):
+        return str(self)
+
+    def get_freq_array(self, kmer: str) -> np.array:
+        return np.array(list(self.probability_dict.get(kmer, np.zeros(4, dtype=np.float)).values()))
+
+    def get_expectation(self, seq: str) -> float:
+        # TODO: add to constructor or somewhere lese
+        gnomad_chroms, test_chroms = 71702, 71702
+        scale_factor = test_chroms / gnomad_chroms
+        nparray = np.array
+        kmer_count = 0
+        freq_sum = np.zeros(4, dtype=np.float)
+        for start in range(len(seq) - self.kmer_size + 1):
+            next_k = seq[start:start + self.kmer_size]
+            if 'N' not in next_k:
+                kmer_count += 1
+                try:
+                    freq_sum += nparray(list(self.probability_dict[next_k]))
+                except KeyError:
+                    freq_sum += 0
+        return freq_sum * scale_factor
+
+
+def _unpack_models(models: iter):
+    new_models = []
+    names = []
+    for m in models:
+        mname = m.model_name
+        new_models.append((mname, m))
+        names.append(mname)
+        # self.add_model(m)
+    return dict(new_models), names
+
+
+class MethylationModel:
+    def __init__(self, models: iter):
+        self.models, self.names = _unpack_models(models)
+        self.kmer_size = list(self.models.values())[0].kmer_size
+
+    def add_model(self, model: ModelFreq):
+        self.models.update({model.model_name: model})
+
+    def get_frequency(self, model_name: str, kmer):
+        return self.models.get(model_name, np.zeros(4, dtype=np.float)).get_freq_array(kmer)
+
+    def get_methylation_frequency(self, kmer, meth_prob):
+        if meth_prob < 0:
+            return self.models.get('rare_transitions', np.zeros(4, dtype=np.float)).get_freq_array(kmer)
+        elif meth_prob <= 0.2:
+            # return low
+            return self.models.get('low_methylation', np.zeros(4, dtype=np.float)).get_freq_array(kmer)
+        elif 0.2 < meth_prob < 0.6:
+            return self.models.get('intermediate_methylation', np.zeros(4, dtype=np.float)).get_freq_array(kmer)
+        elif meth_prob > 0.6:
+            return self.models.get('high_methylation', np.zeros(4, dtype=np.float)).get_freq_array(kmer)
+        else:
+            # throw error?
+            pass
+
+
 class ModelOps:
     def __init__(self):
         self.kmer_size = 0
@@ -45,7 +117,7 @@ class ModelOps:
                 self.kmer_size = m.kmer_size
             else:
                 if self.kmer_size != m.kmer_size:
-                    print(f'WARNING: K-mer size mismatch. Expected {self.kmer_size} and found {m.kmer_size}.',
+                    print(f'WARNING: K-mer size mismatch. Expected {self.kmer_size} and found {m._kmer_size}.',
                           flush=True, file=sys.stderr)
             self.add_model(m)
         return self.model_names()
@@ -57,13 +129,13 @@ class ModelOps:
         return list(self.models.keys())
 
     def modeldiv(self, name_numerator: str, name_denominator: str, seq: str) -> float:
-        denom = self.models[name_denominator].get_prob(seq)
+        denom = self.models[name_denominator].get_expectation(seq)
         if denom == 0:
             denom = 0.0000000000000001
-        return self.models[name_numerator].get_prob(seq) / denom
+        return self.models[name_numerator].get_expectation(seq) / denom
 
     def get_model_prob(self, name: str, seq: str) -> float:
-        return self.models[name].get_prob(seq)
+        return self.models[name].get_expectation(seq)
 
     def get_model_probabilities(self, names: iter = None, seq: str = None) -> dict:
         results = {}
@@ -71,7 +143,7 @@ class ModelOps:
             names = self.model_names()
         if seq is not None:
             for n in names:
-                results.update({n: self.models[n].get_prob(seq)})
+                results.update({n: self.models[n].get_expectation(seq)})
         return results
 
 
@@ -106,6 +178,11 @@ class GRegion:
         self.start = self.fields['start']
         self.stop = self.fields['stop']
 
+        if self.fields['strand'] is not None:
+            self.strand = self.fields['strand']
+        else:
+            self.strand = None
+
     def gnomad_rep(self):
         return '{}:{}-{}'.format(self.chrom, self.start, self.stop)
 
@@ -113,7 +190,7 @@ class GRegion:
         try:
             return self.fields['strand']
         except KeyError:
-            return None
+            return 'none'
 
     def num_fields(self):
         num_fields = 0

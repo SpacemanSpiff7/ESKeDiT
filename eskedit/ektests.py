@@ -7,16 +7,17 @@ from cyvcf2 import VCF
 def test_ktrain():
     start = time.time()
     from eskedit import GRegion, ktrain
-    #test_region = GRegion('chr1', 1361264.0, 1361777.0)
+    # test_region = GRegion('chr1', 1361264.0, 1361777.0)
     gnomad_vcf = VCF("/Users/simonelongo/too_big_for_icloud/gnomAD_v3/gnomad.genomes.r3.0.sites.vcf.bgz")
     vcf_path = "/Users/simonelongo/too_big_for_icloud/gnomAD_v3/gnomad.genomes.r3.0.sites.vcf.bgz"
     fasta_path = "/Users/simonelongo/too_big_for_icloud/ref_genome/hg38/hg38.fa"
-    bed_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/test_ENSEMBL.bed'
-    #bed_path = "/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/variant_rich.bed"
+    # bed_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/test_ENSEMBL.bed'
+    # bed_path = "/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/variant_rich.bed"
+    bed_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/notebooks/notebook_resources/pc_exon_complement_22june2020.bed'
     meth_vcf_path = "/Users/simonelongo/too_big_for_icloud/gnomAD_v3/gnomadv3_methylation_2.vcf.bgz"
     results = ktrain(bed_path, vcf_path, fasta_path, 7, meth_vcf_path)
     print(results)
-    #var_counts = Counter()
+    # var_counts = Counter()
     # for variant in gnomad_vcf(test_region.gnomad_rep()):
     #     if variant.FILTER is None:
     #         var_counts[variant.INFO.get('AC')] += 1
@@ -88,18 +89,33 @@ def test_ktools():
     print(f'kmer_search wall time: {time.time() - ktime}')
 
     from eskedit.ktools import read_and_build_models, read_models
-    models1 = read_and_build_models('/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/models/raw_counts/pc_exon_complement_22june2020_2020-06-23_15-14')
-    #models2 = read_models('/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/variant_rich_MultinomialModel_2020-07-02_12-51')
+    models1 = read_and_build_models(
+        '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/models/raw_counts/pc_exon_complement_22june2020_2020-06-23_15-14')
+    # models2 = read_models('/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/variant_rich_MultinomialModel_2020-07-02_12-51')
     # print(models1, '\n', models2)
     probs1 = []
     for model in models1:
-        probs1.append(model.get_prob(sequence))
+        probs1.append(model.get_expectation(sequence))
     print(probs1)
     return 'ktools test done in {}'.format(time.time() - start)
 
 
 def test_kquery():
     start = time.time()
+    from eskedit import kquery
+    # bedpath = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/notebooks/notebook_resources/ensembl_protein_coding_22june2020.bed'
+    bedpath = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/utr5.canonical.grch38.labels.bed'
+    gnomad_vcf = VCF("/Users/simonelongo/too_big_for_icloud/gnomAD_v3/gnomad.genomes.r3.0.sites.vcf.bgz")
+    vcfpath = "/Users/simonelongo/too_big_for_icloud/gnomAD_v3/gnomad.genomes.r3.0.sites.vcf.bgz"
+    fastapath = "/Users/simonelongo/too_big_for_icloud/ref_genome/hg38/hg38.fa"
+    kmer_size = 7
+    # mod_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/notebooks/notebook_resources/pc_exon_complement_22june2020_MultinomialModel_2020-07-14_18-43'
+    meth_vcf_path = "/Users/simonelongo/too_big_for_icloud/gnomAD_v3/gnomadv3_methylation_2.vcf.bgz"
+    mod_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/notebooks/notebook_resources/pc_exon_complement_22june2020_2020-07-14_15-59'
+
+    kquery(bedpath, vcfpath, fastapath, kmer_size, methylation=meth_vcf_path, header=False, nprocs=6,
+           raw_counts=mod_path,
+           model_path=None)
     print()
     return 'kquery test done in {}'.format(time.time() - start)
 
@@ -130,10 +146,12 @@ def runtests():
     :return:
     """
     start = time.time()
-    results = [test_ktrain(),
-               test_ktools(),
-               test_kquery(),
-               test_kclasses()]
+    # results = [test_ktrain(),
+    #            test_ktools(),
+    #            test_kquery(),
+    #            test_kclasses()]
+
+    results = [test_kquery()]
 
     for result in results:
         print(str(result))

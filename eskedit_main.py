@@ -3,7 +3,6 @@ ESKeDiT
 
 Created by Simone Longo at the University of Utah 2019
 """
-from eskedit import runtests
 import argparse
 
 if __name__ == "__main__":
@@ -15,6 +14,7 @@ if __name__ == "__main__":
                              help='Input path for methylation VCF (optional)')
     main_parser.add_argument('-f', '--fasta', action='store', dest='fasta_path',
                              help='Input path the reference fasta file')
+    main_parser.add_argument('-o', '--output', action='store', dest='output_path', help='Directory path for outpile files.')
     main_parser.add_argument('-@', '--nprocs', action='store', dest='nprocs', help='Number of available CPUs')
     main_parser.add_argument('-k', '--kmer_size', action='store', dest='kmer_size', help='K-mer size to use')
     main_parser.add_argument('-t', action='store_true', dest='run_test')
@@ -34,6 +34,8 @@ if __name__ == "__main__":
         ktrain(bedpath, vcf_path, fasta_path, 7, meth_vcf_path=meth_vcf_path, nprocs=nprocs)
         exit(0)
     if cmd_args.unit_test:
+        from eskedit import runtests
+
         runtests()
         exit(0)
 
