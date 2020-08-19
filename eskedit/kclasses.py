@@ -49,7 +49,11 @@ class ModelFreq:
         return str(self)
 
     def get_freq_array(self, kmer: str) -> np.array:
-        return np.array(list(self.probability_dict.get(kmer, np.zeros(4, dtype=np.float)).values()))
+        freq_arr = self.probability_dict.get(kmer)
+        if freq_arr is None:
+            return np.zeros(4, dtype=np.float)
+        else:
+            return np.array(list(freq_arr.values()))
 
     def get_expectation(self, seq: str) -> float:
         # TODO: add to constructor or somewhere lese
@@ -89,21 +93,41 @@ class MethylationModel:
         self.models.update({model.model_name: model})
 
     def get_frequency(self, model_name: str, kmer):
-        return self.models.get(model_name, np.zeros(4, dtype=np.float)).get_freq_array(kmer)
+        freq_arr = self.models.get(model_name)
+        if freq_arr is None:
+            return np.zeros(4, dtype=np.float)
+        else:
+            return freq_arr.get_freq_array(kmer)
+        # return self.models.get(model_name, np.zeros(4, dtype=np.float)).get_freq_array(kmer)
 
     def get_methylation_frequency(self, kmer, meth_prob):
+        # if meth_prob < 0:
+        #     return self.models.get('rare_transitions', np.zeros(4, dtype=np.float)).get_freq_array(kmer)
+        # elif meth_prob <= 0.2:
+        #     # return low
+        #     return self.models.get('low_methylation', np.zeros(4, dtype=np.float)).get_freq_array(kmer)
+        # elif 0.2 < meth_prob < 0.6:
+        #     return self.models.get('intermediate_methylation', np.zeros(4, dtype=np.float)).get_freq_array(kmer)
+        # elif meth_prob > 0.6:
+        #     return self.models.get('high_methylation', np.zeros(4, dtype=np.float)).get_freq_array(kmer)
+        # else:
+        #     return np.zeros(4, dtype=np.float)
         if meth_prob < 0:
-            return self.models.get('rare_transitions', np.zeros(4, dtype=np.float)).get_freq_array(kmer)
+            freq_arr = self.models.get('rare_transitions')
         elif meth_prob <= 0.2:
             # return low
-            return self.models.get('low_methylation', np.zeros(4, dtype=np.float)).get_freq_array(kmer)
+            freq_arr = self.models.get('low_methylation')
         elif 0.2 < meth_prob < 0.6:
-            return self.models.get('intermediate_methylation', np.zeros(4, dtype=np.float)).get_freq_array(kmer)
+            freq_arr = self.models.get('intermediate_methylation')
         elif meth_prob > 0.6:
-            return self.models.get('high_methylation', np.zeros(4, dtype=np.float)).get_freq_array(kmer)
+            freq_arr = self.models.get('high_methylation')
         else:
-            # throw error?
-            pass
+            freq_arr = None
+
+        if freq_arr is None:
+            return np.zeros(4, dtype=np.float)
+        else:
+            return freq_arr.get_freq_array(kmer)
 
 
 class ModelOps:
@@ -154,6 +178,24 @@ class ModelOps:
 #         for name, model in {'low': low, 'mid': mid, 'hi': hi, 'nodata': nodata}.items():
 #             if model is not None:
 #                 self.add_model(model)
+class OETable:
+    def __init__(self, models):
+        self.nuc_idx = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
+        self.observed = np.zeros((4, 4), dtype=np.int)
+        self.expected = np.zeros((4, 4), dtype=np.float)
+        self.models = models
+
+    def count_observed(self, variant):
+        ref_allele = self.nuc_idx.get(variant.REF)
+        alt_allele = self.nuc_idx.get(variant.ALT[0])
+
+        if ref_allele is None or alt_allele is None:
+            raise KeyError('ERROR: Illegal nucleotide.')
+
+        self.observed[ref_allele, alt_allele] += 1
+
+    def count_expected(self, kmer, methylation_prob):
+        pass
 
 
 class GRegion:
@@ -221,12 +263,13 @@ class GRegion:
 
     def __str__(self):
         outstring = []
+        headers = []
         for key, value in self.fields.items():
             if value is not None:
                 if key in self.default_names:
                     outstring.append(str(value))
                 else:
-                    outstring.append(f'{key}:{value}')
+                    outstring.append(f'{value}')
         return '\t'.join(outstring)
 
     def __repr__(self):

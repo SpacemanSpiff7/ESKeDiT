@@ -13,7 +13,7 @@ from os import listdir
 from os.path import isfile, join, splitext
 from scipy.stats import multinomial
 import math
-
+import RNA
 from eskedit.kclasses import Model, ModelFreq
 
 
@@ -30,8 +30,18 @@ def generate_frequencies(transitions_path, counts_path):
     cts.columns = ['counts']
     # merge to align indices
     ts = ts.merge(cts, left_on=None, right_on=None, left_index=True, right_index=True)
-    ts = ts.iloc[:, :4].div(ts.iloc[:, 4], axis=0)
-    return ts
+
+    # commented out becuase doesn't consider all kmers that mutate
+    # ts = ts.iloc[:, :4].div(ts.iloc[:, 4], axis=0)
+    def row_freq_calc(row: pd.Series):
+        row = row.astype(np.float128)
+        for i, v in row.iteritems():
+            row[i] = v / max((row[-1] - v), 0.1)
+        return row
+
+    ts = ts.apply(row_freq_calc, axis=1)
+    # ts = ts.iloc[:, :4].div((ts.iloc[:, 4] - ts.iloc[:, :4].apply(sum, axis=1)), axis=0)
+    return ts.iloc[:, :4]
 
 
 def generate_multinomial_probabilities(transitions_path, counts_path, ksize=None):
@@ -116,6 +126,8 @@ def is_cpg_ct(seq: str, alt: str) -> bool:
 
 
 def is_cpg(seq: str) -> bool:
+    if seq is None:
+        return False
     k = len(seq)
     if k < 3:
         if k == 2:
@@ -123,7 +135,7 @@ def is_cpg(seq: str) -> bool:
         else:
             return False
     else:
-        return seq[k // 2] == 'C' and seq[k // 2 + 1] == 'G'
+        return seq[k // 2] == 'C' and seq[k // 2 + 1] == 'G' and 'N' not in seq
 
 
 def avg_seq_methylation_probability(vcf_iter, seq_len: int = None) -> float:
@@ -149,6 +161,7 @@ def base_methylation_probability(vcf_iter, name=None) -> float:
     meth_prob = None
     for variant in vcf_iter:
         # float(v.format('methylation')[0])
+        # print(f'REF: {variant.REF}\tALT: {variant.ALT}\t{variant.POS}')
         meth_prob = float(variant.format('methylation')[0]) / 100
     if meth_prob is None:
         # perhaps change this return value to 'None' to distinguish from bases with data
@@ -182,10 +195,46 @@ def count_stop_codons(sequence: str, kmer_length: int) -> int:
     return len(matches)
 
 
-def count_g4s(sequence: str, kmer_length: int) -> int:
-    g4_regex = re.compile(r'([gG]{3,5}\w{1,7}){3}[gG]{3,5}')
-    matches = g4_regex.findall(sequence)
-    return len(matches)
+def get_MFE(seq: str):
+    ss, mfe = RNA.fold(seq)
+    return mfe
+
+
+def g4s_sliding_window(seq):
+    num_consecutive_gs = 0
+    num_interg_nucs = 0
+    in_pg4 = False
+    for idx in range(len(seq)):
+        if seq[idx] == 'G':
+            num_consecutive_gs += 1
+            if num_consecutive_gs >= 2:
+                in_pg4 = True
+            else:
+                in_pg4 = False
+            continue
+        else:
+            num_consecutive_gs = 0
+        if in_pg4:
+            num_interg_nucs += 1
+            if num_interg_nucs > 7:
+                in_pg4 = False
+
+
+def count_g4s(sequence: str, kmer_length: int) -> tuple:
+    g4_regex = re.compile('([G]{2,5}[ACGT]{1,7}){3}[G]{2,5}')
+    g4_regex = re.compile(r'([G]{2,5}\w{1,7}){3}[G]{2,5}', re.UNICODE)
+    count = 0
+    pg4s = []
+    for match in g4_regex.finditer(sequence):
+        count += 1
+        start, stop = match.span()
+        pg4 = sequence[start:stop]
+        # print(pg4, get_MFE(pg4))
+        pg4s.append(':'.join([pg4, str(get_MFE(pg4))]))
+
+    # if count == 0:
+    #     return 0, 'none'
+    return count, '|'.join(pg4s)
 
 
 def _kozak_strength(sequence: str) -> int:

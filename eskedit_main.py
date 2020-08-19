@@ -5,7 +5,36 @@ Created by Simone Longo at the University of Utah 2019
 """
 import argparse
 
+
+def ktrain_driver(args):
+    if args.vcf_file_path is None or \
+            args.bed_file_path is None or \
+            args.meth_vcf_path is None or \
+            args.fasta_path is None or \
+            args.kmer_size is None:
+        raise ValueError('All file paths must be provided.')
+    from eskedit import ktrain
+    pass
+
+
+def kquery_driver(args):
+    if args.vcf_file_path is None or \
+            args.bed_file_path is None or \
+            args.meth_vcf_path is None or \
+            args.fasta_path is None or \
+            args.kmer_size is None or \
+            args.counts_directory_path is None:
+        raise ValueError('All file paths must be provided.')
+    from eskedit import kquery
+    pass
+
+
 if __name__ == "__main__":
+    from eskedit import ktrain, kquery
+
+    function_map = {'train': ktrain_driver,
+                    'query': kquery_driver}
+
     main_parser = argparse.ArgumentParser(description='ESKeDiT version 2.0.0')
     main_parser.add_argument('-b', '--bed', action='store', dest='bed_file_path', help='Input BED file path')
     main_parser.add_argument('-v', '--vcf', action='store', dest='vcf_file_path',
@@ -14,13 +43,14 @@ if __name__ == "__main__":
                              help='Input path for methylation VCF (optional)')
     main_parser.add_argument('-f', '--fasta', action='store', dest='fasta_path',
                              help='Input path the reference fasta file')
-    main_parser.add_argument('-o', '--output', action='store', dest='output_path', help='Directory path for outpile files.')
+    main_parser.add_argument('-o', '--output', action='store', dest='output_path',
+                             help='Directory path for outpile files.')
     main_parser.add_argument('-@', '--nprocs', action='store', dest='nprocs', help='Number of available CPUs')
     main_parser.add_argument('-k', '--kmer_size', action='store', dest='kmer_size', help='K-mer size to use')
     main_parser.add_argument('-t', action='store_true', dest='run_test')
     main_parser.add_argument('-u', action='store_true', dest='unit_test')
+    main_parser.add_argument('--counts', action='store', dest='counts_directory_path')
     cmd_args = main_parser.parse_args()
-    from eskedit import ktrain
 
     # This block is for testing purposes
     if cmd_args.run_test:
@@ -41,8 +71,10 @@ if __name__ == "__main__":
 
     if cmd_args.meth_vcf_path is None:
         # run without methylation
-        ktrain(cmd_args.bed_file_path, cmd_args.vcf_file_path, cmd_args.fasta_path, 7, meth_vcf_path=None, nprocs=nprocs)
+        ktrain(cmd_args.bed_file_path, cmd_args.vcf_file_path, cmd_args.fasta_path, 7, meth_vcf_path=None,
+               nprocs=nprocs)
         pass
     else:  # run with metylation
-        ktrain(cmd_args.bed_file_path, cmd_args.vcf_file_path, cmd_args.fasta_path, 7, meth_vcf_path=cmd_args.meth_vcf_path, nprocs=cmd_args.nprocs)
+        ktrain(cmd_args.bed_file_path, cmd_args.vcf_file_path, cmd_args.fasta_path, 7,
+               meth_vcf_path=cmd_args.meth_vcf_path, nprocs=cmd_args.nprocs)
         pass
