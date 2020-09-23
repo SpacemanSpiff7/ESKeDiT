@@ -73,17 +73,26 @@ def read_and_build_models(directory_path: str) -> list:
 
 def read_and_build_frequencies(directory_path: str) -> list:
     # https://stackoverflow.com/questions/3207219/how-do-i-list-all-files-of-a-directory
-    expected_keys = ['ref_kmer_counts', 'singleton_transitions', 'hi_methylation', 'intermediate_methylation',
-                     'low_methylation']
+    # expected_keys_old = ['ref_kmer_counts', 'singleton_transitions', 'hi_methylation', 'intermediate_methylation',
+    #                      'low_methylation']
+
+    kmer_keys = ['ref_kmer_counts', 'lo_kmer_counts', 'mid_kmer_counts', 'hi_kmer_counts']
+    transitions_keys = ['rare_transitions', 'low_methylation', 'intermediate_methylation', 'high_methylation']
+
+    # expected_keys = ['ref_kmer_counts', 'lo_kmer_counts', 'mid_kmer_counts', 'hi_kmer_counts', 'rare_transitions',
+    #                      'low_methylation', 'intermediate_methylation', 'high_methylation']
     files = {}
     for f in listdir(directory_path):
         if isfile(join(directory_path, f)):
             files.update({splitext(f)[0]: join(directory_path, f)})
     counts = {}
-    ref_counts_path = files[expected_keys[0]]
-    for name, path in files.items():
-        if name != expected_keys[0]:
-            counts.update({name: generate_frequencies(path, ref_counts_path)})
+    # ref_counts_path = files[expected_keys[0]]
+    for ref_kmers, transition in zip(kmer_keys, transitions_keys):
+        counts.update({transition: generate_frequencies(files.get(transition), files.get(ref_kmers))})
+    # for name, path in files.items():
+    #     if name != expected_keys[0]:
+    #         counts.update({name: generate_frequencies(path, ref_counts_path)})
+
     return df_to_freq_model(counts)
 
 
@@ -116,10 +125,16 @@ def is_cpg_ct(seq: str, alt: str) -> bool:
     k = len(seq)
     if k < 3:
         if k == 2:
+            # TODO: need to check for k < 3
             return seq[0] == 'C' and seq[1] == 'G' and alt == 'T'
         else:
             return False
-    elif seq[k // 2] == 'C' and seq[k // 2 + 1] == 'G' and alt == 'T':
+    elif (seq[k // 2] == 'C' and seq[k // 2 + 1] == 'G' and alt == 'T') or (
+            seq[k // 2] == 'G' and seq[k // 2 - 1] == 'C' and alt == 'A'):
+        # ATTCGTT TTCGTTA
+        # TAAGCAA
+
+        # AACGAAT
         return True
     else:
         return False
@@ -131,11 +146,12 @@ def is_cpg(seq: str) -> bool:
     k = len(seq)
     if k < 3:
         if k == 2:
-            return seq[0] == 'C' and seq[1] == 'G'
+            return (seq[0] == 'C' and seq[1] == 'G') or (seq[0] == 'G' and seq[1] == 'C')
         else:
             return False
     else:
-        return seq[k // 2] == 'C' and seq[k // 2 + 1] == 'G' and 'N' not in seq
+        return (seq[k // 2] == 'C' and seq[k // 2 + 1] == 'G' and 'N' not in seq) or (
+                seq[k // 2] == 'G' and seq[k // 2 + 1] == 'C' and 'N' not in seq)
 
 
 def avg_seq_methylation_probability(vcf_iter, seq_len: int = None) -> float:
@@ -174,12 +190,15 @@ def is_quality_snv(variant) -> bool:
     return variant.FILTER is None and len(variant.ALT) == 1 and len(variant.REF) == 1 and len(variant.ALT[0]) == 1
 
 
-def count_kmers(sequence: str, kmer_length: int) -> Counter:
+def count_kmers(ref_seq: str, kmer_length: int) -> Counter:
     counts = Counter()
-    for i in range(len(sequence) - (kmer_length - 1)):
-        next_seq = sequence[i:(i + kmer_length)]
-        if not ('N' in next_seq):
-            counts[next_seq.upper()] += 1
+    complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
+    reverse = ''.join([complement.get(base) for base in ref_seq[::-1]])
+    for sequence in [ref_seq, reverse]:
+        for i in range(len(sequence) - (kmer_length - 1)):
+            next_seq = sequence[i:(i + kmer_length)]
+            if not ('N' in next_seq):
+                counts[next_seq] += 1
     return counts
 
 
@@ -221,7 +240,7 @@ def g4s_sliding_window(seq):
 
 
 def count_g4s(sequence: str, kmer_length: int) -> tuple:
-    g4_regex = re.compile('([G]{2,5}[ACGT]{1,7}){3}[G]{2,5}')
+    # g4_regex = re.compile('([G]{2,5}[ACGT]{1,7}){3}[G]{2,5}')
     g4_regex = re.compile(r'([G]{2,5}\w{1,7}){3}[G]{2,5}', re.UNICODE)
     count = 0
     pg4s = []

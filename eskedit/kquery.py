@@ -23,6 +23,8 @@ from eskedit import is_cpg
 import numpy as np
 import multiprocessing as mp
 
+print_lock = mp.Semaphore(value=1)
+
 
 def calculate_expectation_matrix(region: GRegion, meth_vcf: VCF, models: MethylationModel, sequence: str,
                                  kmer_size: int = 7) -> tuple:
@@ -38,22 +40,55 @@ def calculate_expectation_matrix(region: GRegion, meth_vcf: VCF, models: Methyla
     complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
     for start_idx in range(len(sequence) - kmer_size + 1):
         forward_kmer = sequence[start_idx: start_idx + kmer_size]
-        reverse_complement = ''.join([complement.get(base, 'N') for base in list(sequence[start_idx: start_idx + kmer_size][::-1])])
+        reverse_complement = ''.join(
+            [complement.get(base, 'N') for base in list(sequence[start_idx: start_idx + kmer_size][::-1])])
         next_kmers = [forward_kmer, reverse_complement]
-        for next_kmer in next_kmers:
-            from_idx = nuc_idx.get(next_kmer[kmer_size // 2], None)
-            if from_idx is None:
-                continue
-            new_expected = models.get_frequency('rare_transitions', next_kmer)
-            raw_freq_sum[from_idx] = raw_freq_sum[from_idx] + new_expected
-            if cpg_check(next_kmer):
-                vcf_idx = region.start + start_idx
-                meth_prob = base_methylation_probability_cache(meth_vcf(f'{region.chrom}:{vcf_idx}-{vcf_idx}'))
-                ct_freq_meth = models.get_methylation_frequency(next_kmer, meth_prob)[3]  # should be column index for T
-                ct_freq_sum += ct_freq_meth
-                new_expected[3] = ct_freq_meth
 
-            adj_freq_sum[from_idx] = adj_freq_sum[from_idx] + new_expected
+        # analysis for forward kmer
+        from_idx = nuc_idx.get(forward_kmer[kmer_size // 2], None)
+        if from_idx is None:
+            continue
+        new_expected = models.get_frequency('rare_transitions', forward_kmer)
+        raw_freq_sum[from_idx] = raw_freq_sum[from_idx] + new_expected
+        if cpg_check(forward_kmer):
+            vcf_idx = region.start + start_idx
+            meth_prob = base_methylation_probability_cache(meth_vcf(f'{region.chrom}:{vcf_idx}-{vcf_idx}'))
+            ct_freq_meth = models.get_methylation_frequency(forward_kmer, meth_prob)[3]  # should be column index for T
+            ct_freq_sum += ct_freq_meth
+            new_expected[3] = ct_freq_meth
+
+        adj_freq_sum[from_idx] = adj_freq_sum[from_idx] + new_expected
+
+        # analysis for reverse kmer
+        from_idx = nuc_idx.get(reverse_complement[kmer_size // 2], None)
+        if from_idx is None:
+            continue
+        new_expected = models.get_frequency('rare_transitions', reverse_complement)
+        raw_freq_sum[from_idx] = raw_freq_sum[from_idx] + new_expected
+        if cpg_check(reverse_complement):
+            vcf_idx = region.start + start_idx
+            meth_prob = base_methylation_probability_cache(meth_vcf(f'{region.chrom}:{vcf_idx}-{vcf_idx}'))
+            ct_freq_meth = models.get_methylation_frequency(reverse_complement, meth_prob)[3]  # should be column index for T
+            ct_freq_sum += ct_freq_meth
+            new_expected[3] = ct_freq_meth
+
+        adj_freq_sum[from_idx] = adj_freq_sum[from_idx] + new_expected
+
+        # for next_kmer in next_kmers:
+        #     from_idx = nuc_idx.get(next_kmer[kmer_size // 2], None)
+        #
+        #     if from_idx is None:
+        #         continue
+        #     new_expected = models.get_frequency('rare_transitions', next_kmer)
+        #     raw_freq_sum[from_idx] = raw_freq_sum[from_idx] + new_expected
+        #     if cpg_check(next_kmer):
+        #         vcf_idx = region.start + start_idx
+        #         meth_prob = base_methylation_probability_cache(meth_vcf(f'{region.chrom}:{vcf_idx}-{vcf_idx}'))
+        #         ct_freq_meth = models.get_methylation_frequency(next_kmer, meth_prob)[3]  # should be column index for T
+        #         ct_freq_sum += ct_freq_meth
+        #         new_expected[3] = ct_freq_meth
+        #
+        #     adj_freq_sum[from_idx] = adj_freq_sum[from_idx] + new_expected
     return raw_freq_sum, adj_freq_sum, ct_freq_sum
 
 
@@ -117,6 +152,8 @@ def query_regions(region_chunk: iter, models: MethylationModel, vcf_path: str, f
             # TODO: meaningful error message
             continue
 
+        if 'N' in sequence or sequence is None:
+            continue
         kmer_counting = search_kmers(sequence, kmer_size, additional_functions=[count_kmers,
                                                                                 count_orfs,
                                                                                 count_strong_orfs,
@@ -128,6 +165,7 @@ def query_regions(region_chunk: iter, models: MethylationModel, vcf_path: str, f
         # frequency_array, adj_freq, ct_freq = calculate_expected(region, meth_vcf, models, sequence)
         freq_matrix, adj_freq_matrix, ct_freq = calculate_expectation_matrix(region, meth_vcf, models, sequence)
         nuc_idx = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
+        complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
         no_count = 0
         num_ct = 0
         observed_context = defaultdict(lambda: array.array('L', [0, 0, 0, 0]))
@@ -139,7 +177,10 @@ def query_regions(region_chunk: iter, models: MethylationModel, vcf_path: str, f
                 num_all_snvs += 1
                 from_idx = nuc_idx.get(variant.REF)
                 to_idx = nuc_idx.get(variant.ALT[0])
+                from_idx_comp = nuc_idx.get(complement.get(variant.REF, 'N'))
+                to_idx_comp = nuc_idx.get(complement.get(variant.ALT[0], 'N'))
                 observed_transitions[from_idx, to_idx] += 1
+                observed_transitions[from_idx_comp, to_idx_comp] += 1
                 # seq_idx = variant.POS - region.start + kmer_size // 2 - 1
                 # seq_context = sequence[seq_idx - kmer_size // 2: seq_idx + kmer_size // 2 + 1]
                 # if 'N' in seq_context or len(seq_context) == 0:
@@ -157,7 +198,11 @@ def query_regions(region_chunk: iter, models: MethylationModel, vcf_path: str, f
         region.add_field('predicted_structures',
                          f'num_start_codons={kmer_counting["count_start_codons"]};num_stop_codons={kmer_counting["count_stop_codons"]};num_orfs={kmer_counting["count_orfs"]};num_strong_start_codons={kmer_counting["count_strong_start_codons"]};num_strong_orfs={kmer_counting["count_strong_orfs"]};num_g4s={kmer_counting["count_g4s"][0]};g4_mfe={kmer_counting["count_g4s"][1]}')
 
-        print(str(region), flush=True)
+        # print_lock.acquire()
+        # print(str(region), flush=True)
+        # print_lock.release()
+        with print_lock:
+            print(str(region), flush=True)
     pass
 
 
