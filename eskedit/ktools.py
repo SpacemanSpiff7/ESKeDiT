@@ -13,7 +13,7 @@ from os import listdir
 from os.path import isfile, join, splitext
 from scipy.stats import multinomial
 import math
-import RNA
+# import RNA
 from eskedit.kclasses import Model, ModelFreq
 
 
@@ -215,8 +215,8 @@ def count_stop_codons(sequence: str, kmer_length: int) -> int:
 
 
 def get_MFE(seq: str):
-    ss, mfe = RNA.fold(seq)
-    return mfe
+    # ss, mfe = RNA.fold(seq)
+    return 0  # mfe
 
 
 def g4s_sliding_window(seq):
@@ -249,7 +249,8 @@ def count_g4s(sequence: str, kmer_length: int) -> tuple:
         start, stop = match.span()
         pg4 = sequence[start:stop]
         # print(pg4, get_MFE(pg4))
-        pg4s.append(':'.join([pg4, str(get_MFE(pg4))]))
+        # pg4s.append(':'.join([pg4, str(get_MFE(pg4))]))
+        pg4s.append(':'.join([pg4, '0.0']))
 
     # if count == 0:
     #     return 0, 'none'
