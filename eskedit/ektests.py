@@ -107,8 +107,8 @@ def test_kquery():
     start = time.time()
     from eskedit import kquery
     # bedpath = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/notebooks/notebook_resources/ensembl_protein_coding_22june2020.bed'
-    # bedpath = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/utr5.canonical.grch38.labels.bed'
-    bedpath = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/regions_19aug/noncoding_model.19aug2020.bed'
+    bedpath = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/utr5.canonical.grch38.labels.bed'
+    # bedpath = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/regions_19aug/noncoding_model.19aug2020.bed'
     # bedpath = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/notebooks/notebook_resources/pc_exon_complement_22june2020.bed'
     # bedpath = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/notebooks/notebook_resources/ensembl_protein_coding_22june2020.bed'
     # bedpath = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/notebooks/notebook_resources/regulatory_features.GRCh38.p13_sorted.bed'
@@ -122,7 +122,8 @@ def test_kquery():
     # mod_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/pc_complement.LCR_filtered_2020-08-18_18-15'
     # mod_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/regions_19aug/noncoding_model.19aug2020_2020-09-04_11-01'
     # mod_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/regions_19aug/noncoding_model.19aug2020_2020-09-22_16-41'
-    mod_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/regions_19aug/merged.pc_transcripts.ensembl101.grch38.p13_2020-09-23_07-28'
+    # mod_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/regions_19aug/merged.pc_transcripts.ensembl101.grch38.p13_2020-09-23_07-28'
+    mod_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/regions_19aug/noncoding_model.19aug2020_2020-09-23_08-41'
 
     kquery(bedpath, vcfpath, fastapath, kmer_size, methylation=meth_vcf_path, header=False, nprocs=12,
            raw_counts=mod_path,

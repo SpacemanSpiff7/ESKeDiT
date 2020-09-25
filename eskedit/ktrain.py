@@ -63,6 +63,14 @@ def ktrain_region_driver(bedregions: iter, vcfpath: str, fastapath: str, kmer_si
         for variant in meth_vcf(region.gnomad_rep()):
             seq_idx = variant.POS - region.start + kmer_size // 2 - 1
             forward_seq_context = seq[seq_idx - kmer_size // 2: seq_idx + kmer_size // 2 + 1]
+
+            if not is_cpg_ct_ga(forward_seq_context, variant.ALT):
+                continue
+            if variant.REF != forward_seq_context[len(forward_seq_context) // 2]:
+                print(
+                    f'ERROR: Fasta REF {forward_seq_context[len(forward_seq_context) // 2]} and VCF REF {variant.REF} don\'t match at position {variant.POS} on {variant.CHROM}',
+                    flush=True, file=sys.stderr)
+
             reverse_seq_context = ''.join([complement.get(base) for base in forward_seq_context[::-1]])
             for seq_context in [forward_seq_context, reverse_seq_context]:
                 if 'N' in seq_context or len(seq_context) == 0:
@@ -71,11 +79,7 @@ def ktrain_region_driver(bedregions: iter, vcfpath: str, fastapath: str, kmer_si
                 if len(seq_context) != kmer_size:
                     raise IndexError(f'ERROR: kmer_size: {kmer_size} recovered seq len: {len(seq_context)}')
                 # check index
-                # if variant.REF != seq_context[len(seq_context) // 2]:
-                #     print(
-                #         f'ERROR: Fasta REF {seq_context[len(seq_context) // 2]} and VCF REF {variant.REF} don\'t match at position {variant.POS} on {variant.CHROM}',
-                #         flush=True, file=sys.stderr)
-                #
+
                 # check for reverse complement
                 # if variant.REF == 'G':
                 #     seq_context = ''.join([complement.get(base, 'N') for base in list(seq_context[::-1])])
@@ -85,8 +89,9 @@ def ktrain_region_driver(bedregions: iter, vcfpath: str, fastapath: str, kmer_si
                     methylation = -1.0
 
                 if methylation < 0:
-                    print(f'No methylation data for {variant.CHROM}:{variant.POS}-{variant.POS} with context {seq_context}',
-                          file=sys.stderr)
+                    print(
+                        f'No methylation data for {variant.CHROM}:{variant.POS}-{variant.POS} with context {seq_context}',
+                        file=sys.stderr)
                 elif methylation < 0.2:  # low/none
                     low_meth_kmer_counts[seq_context] += 1
                 elif 0.2 <= methylation <= 0.6:
@@ -108,7 +113,8 @@ def ktrain_region_driver(bedregions: iter, vcfpath: str, fastapath: str, kmer_si
                     seq_idx = variant.POS - region.start + kmer_size // 2 - 1
                     forward_seq_context = seq[seq_idx - kmer_size // 2: seq_idx + kmer_size // 2 + 1]
                     reverse_seq_context = ''.join([complement.get(base) for base in forward_seq_context[::-1]])
-                    sequences = [(forward_seq_context, variant.ALT[0]), (reverse_seq_context, complement.get(variant.ALT[0]))]
+                    sequences = [(forward_seq_context, variant.ALT[0]),
+                                 (reverse_seq_context, complement.get(variant.ALT[0]))]
                     for seq_context, seq_variant in sequences:
                         if 'N' in seq_context or len(seq_context) == 0:
                             continue

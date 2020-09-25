@@ -168,7 +168,6 @@ def query_regions(region_chunk: iter, models: MethylationModel, vcf_path: str, f
         complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
         no_count = 0
         num_ct = 0
-        observed_context = defaultdict(lambda: array.array('L', [0, 0, 0, 0]))
         observed_transitions = np.zeros((4, 4), dtype=np.int)
         # measure tfidf and scale observed accordingly. this may address the high O/E
         for variant in gnomad_vcf(region.gnomad_rep()):
