@@ -17,7 +17,7 @@ def ktrain_driver(args):
     ktrain(args.bed_file_path,
            args.vcf_file_path,
            args.fasta_path,
-           args.kmer_size,
+           int(args.kmer_size),
            meth_vcf_path=args.meth_vcf_path,
            nprocs=args.nprocs)
     pass
