@@ -59,12 +59,16 @@ def ktrain_region_driver(bedregions: iter, vcfpath: str, fastapath: str, kmer_si
         # Add count of kmers to master dictionary
         reference_kmer_counts += kmer_results['count_kmers']
 
+        low_meth_kmer_counts_local = Counter()
+        mid_meth_kmer_counts_local = Counter()
+        hi_meth_kmer_counts_local = Counter()
+
         # count kmer contexts for methylation probabilities
         for variant in meth_vcf(region.gnomad_rep()):
             seq_idx = variant.POS - region.start + kmer_size // 2 - 1
             forward_seq_context = seq[seq_idx - kmer_size // 2: seq_idx + kmer_size // 2 + 1]
 
-            if not is_cpg_ct_ga(forward_seq_context, variant.ALT):
+            if not is_cpg_ct_ga(forward_seq_context, variant.ALT[0]):
                 continue
             if variant.REF != forward_seq_context[len(forward_seq_context) // 2]:
                 print(
@@ -93,13 +97,17 @@ def ktrain_region_driver(bedregions: iter, vcfpath: str, fastapath: str, kmer_si
                         f'No methylation data for {variant.CHROM}:{variant.POS}-{variant.POS} with context {seq_context}',
                         file=sys.stderr)
                 elif methylation < 0.2:  # low/none
-                    low_meth_kmer_counts[seq_context] += 1
+                    low_meth_kmer_counts_local[seq_context] += 1
                 elif 0.2 <= methylation <= 0.6:
-                    mid_meth_kmer_counts[seq_context] += 1
+                    mid_meth_kmer_counts_local[seq_context] += 1
                 elif 0.6 < methylation <= 1:
-                    hi_meth_kmer_counts[seq_context] += 1
+                    hi_meth_kmer_counts_local[seq_context] += 1
                 else:
                     print('ERROR: Irregular meth prob', file=sys.stderr)
+
+        low_meth_kmer_counts += low_meth_kmer_counts_local
+        mid_meth_kmer_counts += mid_meth_kmer_counts_local
+        hi_meth_kmer_counts += hi_meth_kmer_counts_local
 
         for variant in gnomadVCF(region.gnomad_rep()):
             varAC = variant.INFO.get('AC')
@@ -207,9 +215,12 @@ def ktrain(bedpath: str, vcfpath: str, fastapath: str, kmer_size: int, meth_vcf_
     with mp.Pool(nprocs) as pool:
         futures = [pool.starmap_async(ktrain_region_driver, driver_args)]
         results = [fut.get() for fut in futures]
-    # results = pool.starmap(ktrain_region_driver, driver_args)
-    # pool.close()
-    # pool.join()
+
+
+    # results = []
+    # for chunk in region_chunks:
+    #     results.append(ktrain_region_driver(chunk, vcfpath, fastapath, kmer_size, meth_vcf_path))
+
     cumulative_results = []
     for ridx, result in enumerate(results[0]):
         for idx, table in enumerate(result):
@@ -231,7 +242,8 @@ def ktrain(bedpath: str, vcfpath: str, fastapath: str, kmer_size: int, meth_vcf_
                         for alt_idx, count in enumerate(count_array):
                             cumulative_results[idx][kmer][alt_idx] += count
 
-    results_index_order = ['ref_kmer_counts', 'lo_kmer_counts', 'mid_kmer_counts', 'hi_kmer_counts', 'rare_transitions',
+    results_index_order = ['ref_kmer_counts', 'low_methylation_kmer_counts', 'intermediate_methylation_kmer_counts',
+                           'high_methylation_kmer_counts', 'rare_transitions',
                            'low_methylation', 'intermediate_methylation', 'high_methylation']
     dirpath = make_directory(dirname=dirname)
     for i, res in enumerate(cumulative_results):

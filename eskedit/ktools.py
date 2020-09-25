@@ -75,8 +75,8 @@ def read_and_build_frequencies(directory_path: str) -> list:
     # https://stackoverflow.com/questions/3207219/how-do-i-list-all-files-of-a-directory
     # expected_keys_old = ['ref_kmer_counts', 'singleton_transitions', 'hi_methylation', 'intermediate_methylation',
     #                      'low_methylation']
-
-    kmer_keys = ['ref_kmer_counts', 'lo_kmer_counts', 'mid_kmer_counts', 'hi_kmer_counts']
+    # kmer_keys = ['ref_kmer_counts', 'lo_kmer_counts', 'mid_kmer_counts', 'hi_kmer_counts']  # OLD
+    kmer_keys = ['ref_kmer_counts', 'low_methylation_kmer_counts', 'intermediate_methylation_kmer_counts', 'high_methylation_kmer_counts']
     transitions_keys = ['rare_transitions', 'low_methylation', 'intermediate_methylation', 'high_methylation']
 
     # expected_keys = ['ref_kmer_counts', 'lo_kmer_counts', 'mid_kmer_counts', 'hi_kmer_counts', 'rare_transitions',
@@ -88,7 +88,11 @@ def read_and_build_frequencies(directory_path: str) -> list:
     counts = {}
     # ref_counts_path = files[expected_keys[0]]
     for ref_kmers, transition in zip(kmer_keys, transitions_keys):
-        counts.update({transition: generate_frequencies(files.get(transition), files.get(ref_kmers))})
+        transition_fp = files.get(transition, 'none')
+        ref_kmer_fp = files.get(ref_kmers, 'none')
+        if transition_fp is None or ref_kmer_fp is None:
+            print(f'Unmatched kmer counts and transitions')
+        counts.update({transition: generate_frequencies(transition_fp, ref_kmer_fp)})
     # for name, path in files.items():
     #     if name != expected_keys[0]:
     #         counts.update({name: generate_frequencies(path, ref_counts_path)})

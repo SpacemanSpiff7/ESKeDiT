@@ -12,9 +12,9 @@ def test_ktrain():
     vcf_path = "/Users/simonelongo/too_big_for_icloud/gnomAD_v3/gnomad.genomes.r3.0.sites.vcf.bgz"
     fasta_path = "/Users/simonelongo/too_big_for_icloud/ref_genome/hg38/hg38.fa"
     # bed_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/test_ENSEMBL.bed'
-    # bed_path = "/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/variant_rich.bed"
+    bed_path = "/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/testfiles/variant_rich.bed"
     # bed_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/notebooks/notebook_resources/pc_exon_complement_22june2020.bed'
-    bed_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/regions_19aug/noncoding_model.19aug2020.bed'
+    # bed_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/regions_19aug/noncoding_model.19aug2020.bed'
     # bed_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/pc_complement.LCR_filtered.bed'
     # bed_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/regions_19aug/merged.pc_transcripts.ensembl101.grch38.p13.bed'
     meth_vcf_path = "/Users/simonelongo/too_big_for_icloud/gnomAD_v3/gnomadv3_methylation_2.vcf.bgz"
@@ -123,7 +123,8 @@ def test_kquery():
     # mod_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/regions_19aug/noncoding_model.19aug2020_2020-09-04_11-01'
     # mod_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/regions_19aug/noncoding_model.19aug2020_2020-09-22_16-41'
     # mod_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/regions_19aug/merged.pc_transcripts.ensembl101.grch38.p13_2020-09-23_07-28'
-    mod_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/regions_19aug/noncoding_model.19aug2020_2020-09-23_08-41'
+    # mod_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/regions_19aug/noncoding_model.19aug2020_2020-09-23_08-41'
+    mod_path = '/Users/simonelongo/Documents/QuinlanLabFiles/ESKeDiT/resources/noncoding_model.19aug2020_2020-09-25_14-01'
 
     kquery(bedpath, vcfpath, fastapath, kmer_size, methylation=meth_vcf_path, header=False, nprocs=12,
            raw_counts=mod_path,
@@ -163,8 +164,8 @@ def runtests():
     #            test_kquery(),
     #            test_kclasses()]
 
-    # results = [test_kquery()]
-    results = [test_ktrain()]
+    results = [test_kquery()]
+    # results = [test_ktrain()]
 
     for result in results:
         print(str(result))
