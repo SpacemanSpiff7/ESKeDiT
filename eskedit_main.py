@@ -35,10 +35,10 @@ def kquery_driver(args):
     kquery(args.bed_file_path,
            args.vcf_file_path,
            args.fasta_path,
-           args.kmer_size,
+           int(args.kmer_size),
            methylation=args.meth_vcf_path,
            raw_counts=args.counts_directory_path,
-           nprocs=args.nprocs)
+           nprocs=int(args.nprocs))
     return
 
 
